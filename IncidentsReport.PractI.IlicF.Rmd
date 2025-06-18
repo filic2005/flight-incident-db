@@ -1,0 +1,95 @@
+---
+title: "Analyze Incidents & Flights"
+author: "Filip Ilic"
+date: "Summer 1 2025"
+output:
+  pdf_document: default
+  html_notebook: default
+subtitle: CS3200 Final Project
+---
+
+```{r, echo=FALSE, warning=FALSE}
+library(kableExtra)
+library(RMySQL)
+
+db_host_aiven <- "" # your host goes here
+db_port_aiven <- 0 # your port goes here
+db_name_aiven <- "" # your name goes here
+db_user_aiven <- "" # your user goes here
+db_pwd_aiven <- "" # your pwd goes here
+
+mydb.aiven <- dbConnect(RMySQL::MySQL(), 
+                        user = db_user_aiven,
+                        password = db_pwd_aiven,
+                        dbname = db_name_aiven,
+                        host = db_host_aiven,
+                        port = db_port_aiven)
+```
+
+## Analysis by Month
+
+```{r, echo=FALSE, warning=FALSE}
+monthly_incidents <- "
+SELECT MONTH(date) AS Month, it.incident_type as IncidentType, COUNT(*) AS TotalIncidents
+FROM Incidents i
+JOIN IncidentTypes it ON i.itid = it.itid
+GROUP BY Month, IncidentType
+ORDER BY Month, IncidentType;
+"
+mi_table <- dbGetQuery(mydb.aiven, monthly_incidents)
+mi_table$Month <- month.name[mi_table$Month]
+
+mi_table %>%
+  kable(caption = "Monthly Incident Totals by Type") %>%
+  kable_styling(full_width = FALSE, bootstrap_options = c("striped", "hover"))
+```
+
+## Analysis by Airline
+
+```{r, echo=FALSE, warning=FALSE}
+incidents_delay <- "
+SELECT a.airline AS Airline, COUNT(*) AS TotalIncidents, ROUND(AVG(f.delay_mins), 2) as AverageDelay
+FROM Incidents i
+JOIN Flights f ON f.fid = i.fid
+JOIN Airlines a ON f.airline_id = a.airline_id
+GROUP BY a.airline
+ORDER BY TotalIncidents;
+"
+id_table <- dbGetQuery(mydb.aiven, incidents_delay)
+
+id_table %>%
+  kable(caption = "Incident Summary by Airline") %>%
+  kable_styling(bootstrap_options = c("striped", "hover"))
+```
+## Trend by Year
+
+```{r, echo=FALSE, warning=FALSE}
+yearly_trend_sql <- "
+SELECT YEAR(date) AS year, COUNT(*) AS total_incidents
+FROM Incidents
+GROUP BY year
+ORDER BY year;
+"
+yearly_trend <- dbGetQuery(mydb.aiven, yearly_trend_sql)
+
+plot(yearly_trend$year, yearly_trend$total_incidents, 
+     type = "o",
+     xlab = "Year", 
+     ylab = "Total Incidents", 
+     main = "Total Number of Incidents by Year",
+     
+     ## values were going off the plot so had to increase its size a little
+     ylim = c(0, max(yearly_trend$total_incidents) * 1.2))
+
+## adding data labels so its easier to read
+text(yearly_trend$year, yearly_trend$total_incidents, labels = yearly_trend$total_incidents, 
+     pos = 3, cex = 0.5,)
+
+```
+
+```{r, echo=FALSE, warning=FALSE, results='hide'}
+dbDisconnect(mydb.aiven)
+```
+
+
+
